@@ -293,27 +293,29 @@ def prepare_intent(request):
     else:
         raise DomainError('Choose a supported instruction type.')
     if not form.is_valid():
-        template = (
-            'payments/schedules.html'
-            if kind == 'SCHEDULE'
-            else 'payments/destinations.html'
-            if kind == 'DESTINATION'
-            else 'payments/entry.html'
-        )
-        context = {'form': form, 'kind': kind, 'wallet': wallet_for(request.user), 'page': 'money'}
-        if kind == 'SCHEDULE':
-            context['schedules'] = (
-                Schedule.objects.filter(owner=request.user)
-                .select_related('recipient__owner', 'operation')
-                .order_by('-created_at')[:50]
-            )
-        if kind == 'DESTINATION':
-            context['destinations'] = Destination.objects.filter(owner=request.user)
-        return render(request, template, context, status=422)
+        return entry_error_response(request, form, kind, 422)
     instruction = dict(form.cleaned_data)
     instruction.pop('local_time', None)
-    intent = workflows.create_intent(request.user, kind, instruction)
+    try:
+        intent = workflows.create_intent(request.user, kind, instruction)
+    except DomainError as exc:
+        if exc.code not in {'INVALID', 'LIMIT', 'CAPACITY', 'INSUFFICIENT_FUNDS', 'STALE'}:
+            raise
+        form.add_error(None, str(exc))
+        return entry_error_response(request, form, kind, exc.status)
     return redirect('payments:intent_review', intent_id=intent.id)
+
+
+def entry_error_response(request, form, kind, status):
+    template = 'payments/schedules.html' if kind == 'SCHEDULE' else 'payments/destinations.html' if kind == 'DESTINATION' else 'payments/entry.html'
+    context = {'form': form, 'kind': kind, 'wallet': wallet_for(request.user), 'page': 'money'}
+    if kind == 'SCHEDULE':
+        context['schedules'] = Schedule.objects.filter(owner=request.user).select_related('recipient__owner', 'operation').order_by('-created_at')[:50]
+    if kind == 'DESTINATION':
+        context['destinations'] = Destination.objects.filter(owner=request.user)
+    elif kind in {'FUNDING', 'WITHDRAWAL'}:
+        context['destinations'] = Destination.objects.filter(owner=request.user, status='ACTIVE')
+    return render(request, template, context, status=status)
 
 
 def prepare_with_kind(request, kind):
