@@ -950,7 +950,7 @@ def request_action(request, request_id, action):
     form = forms.VersionForm(request.POST)
     if not form.is_valid():
         raise DomainError('Refresh the request before deciding it.')
-    workflows.decide_request(request.user, item.id, action.upper(), form.cleaned_data['version'])
+    workflows.decide_request(request.user, item.id, action, form.cleaned_data['version'])
     return redirect('payments:request_detail', request_id=item.id)
 
 
