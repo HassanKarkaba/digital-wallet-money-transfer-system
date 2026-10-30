@@ -307,10 +307,20 @@ def prepare_intent(request):
 
 
 def entry_error_response(request, form, kind, status):
-    template = 'payments/schedules.html' if kind == 'SCHEDULE' else 'payments/destinations.html' if kind == 'DESTINATION' else 'payments/entry.html'
+    template = (
+        'payments/schedules.html'
+        if kind == 'SCHEDULE'
+        else 'payments/destinations.html'
+        if kind == 'DESTINATION'
+        else 'payments/entry.html'
+    )
     context = {'form': form, 'kind': kind, 'wallet': wallet_for(request.user), 'page': 'money'}
     if kind == 'SCHEDULE':
-        context['schedules'] = Schedule.objects.filter(owner=request.user).select_related('recipient__owner', 'operation').order_by('-created_at')[:50]
+        context['schedules'] = (
+            Schedule.objects.filter(owner=request.user)
+            .select_related('recipient__owner', 'operation')
+            .order_by('-created_at')[:50]
+        )
     if kind == 'DESTINATION':
         context['destinations'] = Destination.objects.filter(owner=request.user)
     elif kind in {'FUNDING', 'WITHDRAWAL'}:
@@ -1059,8 +1069,6 @@ def dispute_detail(request, case_id):
 @require_GET
 @domain_boundary
 def accepted_action(request, family, action_key):
-    from accounts.services import rate_limit
-
     families = {
         'TRANSFER',
         'FUNDING',
@@ -1080,7 +1088,6 @@ def accepted_action(request, family, action_key):
     family = family.upper()
     if family not in families:
         raise Http404
-    rate_limit('status', str(request.user.id), 60, 60)
     result = workflows.resolve_accepted_action(request.user, action_key, family=family)
     if 'application/json' not in request.headers.get('Accept', ''):
         return result_redirect(request, family, result)

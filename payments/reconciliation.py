@@ -116,6 +116,10 @@ def reopen_gate(actor, reason, final_guard=None):
                 'CONFLICT',
                 409,
             )
+        if gate.last_seen_at and db_now() < gate.last_seen_at - timedelta(seconds=60):
+            raise DomainError(
+                'Correct the database clock and run a fresh reconciliation before reopening.', 'CONFLICT', 409
+            )
         if (last.cutoff_at or last.created_at) < gate.changed_at:
             raise DomainError('Run a new clean reconciliation after the latest incident.', 'CONFLICT', 409)
         if gate.changed_by_id == actor.pk or last.actor_id == actor.pk:

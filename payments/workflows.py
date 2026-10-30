@@ -96,6 +96,9 @@ def _gate(require_open=True):
             'UNAVAILABLE',
             503,
         )
+    last_seen = IntegrityGate.objects.filter(pk=1).values_list('last_seen_at', flat=True).first()
+    if last_seen and db_now() < last_seen - timedelta(seconds=60):
+        raise DomainError('Money activity is paused until the database clock is checked.', 'UNAVAILABLE', 503)
     try:
         marker = json.loads(settings.RECOVERY_MARKER_PATH.read_text())
         if (
@@ -572,7 +575,7 @@ def confirm_intent(actor, intent_id, action_key, expected_kind=None):
     if not initial:
         return resolve_accepted_action(actor, key, intent_id=_uuid(intent_id), family=expected_kind)
     accepted = ReplayKey.objects.filter(owner=actor, family=initial.kind, action_key=key).exists()
-    rate_limit('accepted-status' if accepted else 'money-admission', actor.pk, 60 if accepted else 20, 60)
+    rate_limit('status' if accepted else 'money-admission', actor.pk, 60 if accepted else 20, 60)
     if expected_kind and initial.kind != expected_kind:
         raise DomainError('Wrong instruction type.', 'CONFLICT', 409)
     ins = initial.instruction
@@ -1563,7 +1566,7 @@ def resolve_accepted_action(actor, action_key, intent_id=None, family=None):
     """Authorized read through the lifetime mapping; proof files may have expired."""
     from accounts.services import rate_limit
 
-    rate_limit('accepted-status', actor.pk, 60, 60)
+    rate_limit('status', actor.pk, 60, 60)
     key = _uuid(action_key)
     query = ReplayKey.objects.filter(owner=actor, action_key=key)
     if intent_id:
