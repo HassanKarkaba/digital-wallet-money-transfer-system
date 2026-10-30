@@ -37,6 +37,10 @@ from payments.models import MoneyRequest, Operation, Schedule
 from rails.models import Destination
 
 
+def by_label(page, name):
+    return page.get_by_label(re.compile(r'^\s*' + re.escape(name) + r':?\s*$'))
+
+
 def main():
     assert settings.DATABASES['default']['NAME'] == 'wallet_test', 'Refusing development primary database'
     assert settings.DATABASES['simulator']['NAME'] == 'simulator_test', (
@@ -71,7 +75,7 @@ def main():
 
     def confirm(page, user):
         expect(page.get_by_role('heading', name='Review & confirm')).to_be_visible()
-        otp = page.get_by_label('Authenticator code', exact=True)
+        otp = by_label(page, 'Authenticator code')
         if otp.is_visible():
             otp.fill(fresh_code(user))
         page.get_by_role('button', name='Confirm exact instruction').click()
@@ -79,12 +83,12 @@ def main():
 
     def login(page, credential):
         page.goto(base + '/accounts/login/')
-        page.get_by_label('Email', exact=True).fill(credential['email'])
-        page.get_by_label('Password', exact=True).fill(credential['password'])
-        page.get_by_label('Password', exact=True).press('Enter')
+        by_label(page, 'Email').fill(credential['email'])
+        by_label(page, 'Password').fill(credential['password'])
+        by_label(page, 'Password').press('Enter')
         user = User.objects.get(email=credential['email'])
         if user.mfa_confirmed:
-            page.get_by_label('Authenticator code', exact=True).fill(fresh_code(user))
+            by_label(page, 'Authenticator code').fill(fresh_code(user))
             page.get_by_role('button', name='Verify and sign in').click()
         expect(page.get_by_role('heading', name='Wallet overview.')).to_be_visible()
         return user
@@ -112,10 +116,10 @@ def main():
         page.keyboard.press('Enter')
         expect(page.locator('#main')).to_be_focused()
         page.goto(base + '/accounts/register/')
-        page.get_by_label('Your name', exact=True).fill('Riley Carter')
-        page.get_by_label('Handle', exact=True).fill(handle)
-        page.get_by_label('Email', exact=True).fill(email)
-        page.get_by_label('Password', exact=True).fill(password)
+        by_label(page, 'Your name').fill('Riley Carter')
+        by_label(page, 'Handle').fill(handle)
+        by_label(page, 'Email').fill(email)
+        by_label(page, 'Password').fill(password)
         page.get_by_role('button', name='Create account').click()
         expect(page.get_by_role('heading', name='Welcome back')).to_be_visible()
         user = User.objects.get(email=email)
@@ -142,13 +146,13 @@ def main():
         link = re.search(r'/accounts/verify/[^\s]+/', captured_body).group(0)
         page.goto(base + link)
         page.get_by_role('button', name='Verify email').click()
-        page.get_by_label('Email', exact=True).fill(email)
-        page.get_by_label('Password', exact=True).fill(password)
+        by_label(page, 'Email').fill(email)
+        by_label(page, 'Password').fill(password)
         page.get_by_role('button', name='Sign in', exact=True).click()
         expect(page.get_by_text('One more step before moving money.')).to_be_visible()
         page.get_by_role('link', name='Set up your authenticator').click()
         user.refresh_from_db()
-        page.get_by_label('Authenticator code', exact=True).fill(fresh_code(user))
+        by_label(page, 'Authenticator code').fill(fresh_code(user))
         page.get_by_role('button', name='Confirm authenticator').click()
         expect(page.locator('.recovery-codes li')).to_have_count(10)
         page.get_by_role('link', name='I saved my codes').click()
@@ -159,7 +163,7 @@ def main():
         )
 
         page.goto(base + '/recipients/')
-        page.get_by_label('Exact recipient handle', exact=True).fill('jordan')
+        by_label(page, 'Exact recipient handle').fill('jordan')
         page.get_by_label('Label', exact=False).fill('Jordan')
         page.get_by_role('button', name='Save recipient').click()
         expect(page.get_by_text('@jordan', exact=True)).to_be_visible()
@@ -169,7 +173,7 @@ def main():
         )
 
         page.goto(base + '/destinations/')
-        page.get_by_label('Synthetic destination label', exact=True).fill('Browser synthetic checking')
+        by_label(page, 'Synthetic destination label').fill('Browser synthetic checking')
         page.get_by_role('button', name='Review destination').click()
         confirm(page, user)
         expect(
@@ -185,7 +189,7 @@ def main():
         )
 
         page.goto(base + '/funding/')
-        page.get_by_label('Amount', exact=True).fill('20.00')
+        by_label(page, 'Amount').fill('20.00')
         page.get_by_role('button', name='Review funding').click()
         expect(page.get_by_text('$20.00 USD', exact=False).first).to_be_visible()
         confirm(page, user)
@@ -201,19 +205,19 @@ def main():
         )
 
         page.goto(base + '/send/')
-        page.get_by_label('Recipient handle', exact=True).fill('jordan')
-        page.get_by_label('Amount', exact=True).fill('1.001')
+        by_label(page, 'Recipient handle').fill('jordan')
+        by_label(page, 'Amount').fill('1.001')
         page.get_by_role('button', name='Review transfer').click()
         expect(page.locator('.error-summary')).to_be_visible()
-        expect(page.get_by_label('Recipient handle', exact=True)).to_have_value('jordan')
-        page.get_by_label('Amount', exact=True).fill('5.25')
+        expect(by_label(page, 'Recipient handle')).to_have_value('jordan')
+        by_label(page, 'Amount').fill('5.25')
         page.get_by_label('Note', exact=False).fill('Browser journey transfer')
-        page.get_by_label('Recipient handle', exact=True).fill('missing_' + uuid.uuid4().hex[:10])
+        by_label(page, 'Recipient handle').fill('missing_' + uuid.uuid4().hex[:10])
         page.get_by_role('button', name='Review transfer').click()
         expect(page.locator('.error-summary')).to_be_visible()
-        expect(page.get_by_label('Amount', exact=True)).to_have_value('5.25')
+        expect(by_label(page, 'Amount')).to_have_value('5.25')
         expect(page.get_by_label('Note', exact=False)).to_have_value('Browser journey transfer')
-        page.get_by_label('Recipient handle', exact=True).fill('jordan')
+        by_label(page, 'Recipient handle').fill('jordan')
         page.get_by_role('button', name='Review transfer').click()
         confirm(page, user)
         transfer = Operation.objects.filter(actor=user, kind='TRANSFER').latest('created_at')
@@ -226,8 +230,8 @@ def main():
         )
 
         page.goto(base + '/requests/')
-        page.get_by_label('Payer handle', exact=True).fill('jordan')
-        page.get_by_label('Amount', exact=True).fill('2.00')
+        by_label(page, 'Payer handle').fill('jordan')
+        by_label(page, 'Amount').fill('2.00')
         page.get_by_label('Note', exact=False).fill('Browser request')
         page.get_by_role('button', name='Create request').click()
         request = MoneyRequest.objects.filter(requester=user).latest('created_at')
@@ -241,12 +245,12 @@ def main():
         )
 
         page.goto(base + '/schedules/')
-        page.get_by_label('Recipient handle', exact=True).fill('jordan')
-        page.get_by_label('Amount', exact=True).fill('1.00')
+        by_label(page, 'Recipient handle').fill('jordan')
+        by_label(page, 'Amount').fill('1.00')
         due = db_now() + timedelta(days=1)
-        page.get_by_label('Local date and time', exact=True).fill(due.strftime('%Y-%m-%dT%H:%M'))
-        page.get_by_label('IANA timezone', exact=True).fill('UTC')
-        page.get_by_label('UTC offset at that instant', exact=True).fill('+00:00')
+        by_label(page, 'Local date and time').fill(due.strftime('%Y-%m-%dT%H:%M'))
+        by_label(page, 'IANA timezone').fill('UTC')
+        by_label(page, 'UTC offset at that instant').fill('+00:00')
         page.get_by_role('button', name='Review schedule').click()
         confirm(page, user)
         schedule = Schedule.objects.filter(owner=user).latest('created_at')
@@ -260,7 +264,7 @@ def main():
         )
 
         page.goto(base + '/funding/')
-        page.get_by_label('Amount', exact=True).fill('1000.00')
+        by_label(page, 'Amount').fill('1000.00')
         page.get_by_role('button', name='Review funding').click()
         confirm(page, user)
         reviewed = Operation.objects.filter(actor=user, kind='FUNDING').latest('created_at')
@@ -278,7 +282,7 @@ def main():
         reviewer = login(staff_page, seeded['reviewer'])
         staff_page.goto(base + '/staff/')
         staff_page.locator(f'a.case-card[href="/staff/cases/{review_case_id}/"]').click()
-        staff_page.get_by_label('Decision', exact=True).select_option('APPROVE')
+        by_label(staff_page, 'Decision').select_option('APPROVE')
         staff_page.get_by_label('Reason', exact=False).fill(
             'Independent browser review of synthetic funding.'
         )
@@ -296,13 +300,13 @@ def main():
         staff_context.close()
 
         page.goto(base + '/statements/')
-        page.get_by_label('Start date · UTC', exact=True).fill(
+        by_label(page, 'Start date · UTC').fill(
             (db_now() - timedelta(days=1)).date().isoformat()
         )
-        page.get_by_label('End date · UTC (exclusive)', exact=True).fill(
+        by_label(page, 'End date · UTC (exclusive)').fill(
             (db_now() + timedelta(days=1)).date().isoformat()
         )
-        page.get_by_label('Display timezone', exact=True).fill('America/Detroit')
+        by_label(page, 'Display timezone').fill('America/Detroit')
         page.get_by_role('button', name='Generate statement').click()
         deadline = time.monotonic() + 65
         while (
