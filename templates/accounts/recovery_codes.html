@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Save your recovery codes{% endblock %}
+{% block content %}
+<section class="panel account-panel">
+  <p class="eyebrow">Two step verification enabled</p>
+  <h1>Save your recovery codes</h1>
+  <p>These ten codes are shown once. Store them privately. Each code can be used once with your password to replace a lost authenticator.</p>
+  <p>Recovery revokes existing sessions and pauses outgoing payments for 24 hours.</p>
+  <ul class="recovery-codes">{% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}</ul>
+  <a href="/wallet/" class="button primary">I saved my codes</a>
+</section>
+{% endblock %}

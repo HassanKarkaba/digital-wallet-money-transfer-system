@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}Notifications · DWMT{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Stay up to date</p><h1>Notifications</h1><p>Money updates and account activity, in one place.</p></div></div>
+<section class="panel compact-panel"><h2>Email receipts</h2><form method="post" action="{% url 'notifications:preferences' %}">{% csrf_token %}<label class="checkbox"><input type="checkbox" name="email_receipts" {% if user.email_receipts %}checked{% endif %}> Save optional receipts to local captured email</label><p class="muted">Security messages and in-app financial outcomes remain mandatory. No real email is sent.</p><button class="button secondary" type="submit">Save preference</button></form></section>
+<section class="panel compact-panel"><h2>Your inbox</h2>
+{% for item in notifications %}<article class="notification-item"><div><h3>{{ item.title }}</h3><p>{{ item.body }}</p><time datetime="{{ item.created_at|date:'c' }}">{{ item.created_at|date:'M j, Y H:i' }} UTC</time></div>{% if not item.read_at %}<form method="post" action="{% url 'notifications:read' item.pk %}">{% csrf_token %}<button class="button secondary" type="submit">Mark read</button></form>{% else %}<span class="badge">Read</span>{% endif %}</article>{% empty %}<div class="empty-state"><h3>You’re all caught up</h3><p>Updates will appear here when your account or wallet activity changes.</p></div>{% endfor %}
+{% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}">Next</a>{% endif %}</section>
+{% endblock %}

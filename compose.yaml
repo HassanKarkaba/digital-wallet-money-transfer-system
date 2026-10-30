@@ -1,0 +1,76 @@
+name: dwmt
+x-app: &app
+  build:
+    context: .
+    target: runtime
+  image: dwmt-local:latest
+  env_file:
+    - path: .env
+      required: false
+  environment: &runtime-env
+    DWMT_DATABASE_ROLE: runtime
+    MIGRATION_DATABASE_URL: ''
+    SIMULATOR_MIGRATION_DATABASE_URL: ''
+    MIGRATION_PASSWORD: ''
+    POSTGRES_PASSWORD: ''
+    PRIVATE_ROOT: /private
+    EMAIL_FILE_PATH: /mail
+    RECOVERY_MARKER_PATH: /recovery/marker.json
+  volumes:
+    - private:/private
+    - mail:/mail
+    - recovery:/recovery
+  logging: &bounded-logs
+    driver: local
+    options: {max-size: 10m, max-file: '3'}
+  init: true
+  stop_grace_period: 30s
+services:
+  db:
+    image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
+    logging: *bounded-logs
+    command: [postgres, -c, log_min_error_statement=panic, -c, log_error_verbosity=terse, -c, log_statement=none]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      WALLET_PASSWORD: ${WALLET_PASSWORD:-}
+      SIMULATOR_PASSWORD: ${SIMULATOR_PASSWORD:-}
+      MIGRATION_PASSWORD: ${MIGRATION_PASSWORD:-}
+    volumes:
+      - database:/var/lib/postgresql/data
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    <<: *app
+    command: [sh, scripts/migrate.sh]
+    environment:
+      <<: *runtime-env
+      DWMT_DATABASE_ROLE: migration
+      MIGRATION_DATABASE_URL: ${MIGRATION_DATABASE_URL:-}
+      SIMULATOR_MIGRATION_DATABASE_URL: ${SIMULATOR_MIGRATION_DATABASE_URL:-}
+    depends_on:
+      db: {condition: service_healthy}
+  web:
+    <<: *app
+    ports: [127.0.0.1:8000:8000]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  worker:
+    <<: *app
+    command: [python, manage.py, run_worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  simulator:
+    <<: *app
+    command: [python, manage.py, run_simulator]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+volumes:
+  database:
+  private:
+  mail:
+  recovery:

@@ -1,0 +1,121 @@
+[
+  {
+    "name": "argon2-cffi",
+    "version": "25.1.0",
+    "license_expression": "MIT",
+    "notices": [
+      "argon2-cffi/LICENSE"
+    ]
+  },
+  {
+    "name": "argon2-cffi-bindings",
+    "version": "26.1.0",
+    "license_expression": "MIT",
+    "notices": [
+      "argon2-cffi-bindings/LICENSE"
+    ]
+  },
+  {
+    "name": "asgiref",
+    "version": "3.13.0",
+    "license_expression": "BSD-3-Clause",
+    "notices": [
+      "asgiref/LICENSE"
+    ]
+  },
+  {
+    "name": "cffi",
+    "version": "2.1.1",
+    "license_expression": "MIT-0",
+    "notices": [
+      "cffi/LICENSE"
+    ]
+  },
+  {
+    "name": "cryptography",
+    "version": "50.0.2",
+    "license_expression": "Apache-2.0 OR BSD-3-Clause",
+    "notices": [
+      "cryptography/LICENSE",
+      "cryptography/LICENSE.APACHE",
+      "cryptography/LICENSE.BSD"
+    ]
+  },
+  {
+    "name": "Django",
+    "version": "5.2.18",
+    "license_expression": "BSD-3-Clause",
+    "notices": [
+      "Django/AUTHORS",
+      "Django/LICENSE",
+      "Django/LICENSE.python"
+    ]
+  },
+  {
+    "name": "gunicorn",
+    "version": "25.3.0",
+    "license_expression": "MIT",
+    "notices": [
+      "gunicorn/LICENSE"
+    ]
+  },
+  {
+    "name": "packaging",
+    "version": "26.3",
+    "license_expression": "Apache-2.0 OR BSD-2-Clause",
+    "notices": [
+      "packaging/LICENSE",
+      "packaging/LICENSE.APACHE",
+      "packaging/LICENSE.BSD"
+    ]
+  },
+  {
+    "name": "psycopg",
+    "version": "3.3.6",
+    "license_expression": "LGPL-3.0-only",
+    "notices": [
+      "psycopg/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "psycopg-binary",
+    "version": "3.3.6",
+    "license_expression": "LGPL-3.0-only",
+    "notices": [
+      "psycopg-binary/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "pycparser",
+    "version": "3.12",
+    "license_expression": "BSD-3-Clause",
+    "notices": [
+      "pycparser/LICENSE"
+    ]
+  },
+  {
+    "name": "PyOTP",
+    "version": "2.10.0",
+    "license_expression": "MIT",
+    "notices": [
+      "PyOTP/LICENSE"
+    ]
+  },
+  {
+    "name": "sqlparse",
+    "version": "0.6.0",
+    "license_expression": null,
+    "notices": [
+      "sqlparse/AUTHORS",
+      "sqlparse/LICENSE"
+    ]
+  },
+  {
+    "name": "whitenoise",
+    "version": "6.12.0",
+    "license_expression": "MIT",
+    "notices": [
+      "whitenoise/LICENSE"
+    ]
+  }
+]

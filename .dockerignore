@@ -1,0 +1,14 @@
+.git
+.env*
+.local
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+staticfiles
+*.log
+*.docx
+*.zip
+*.tar
+.ruff_cache
+.pytest_cache

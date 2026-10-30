@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Account settings{% endblock %}
+{% block content %}
+<header class="page-heading"><div><p class="eyebrow">Your account</p><h1>Account settings</h1><p>Manage your profile, sign in protection and retained records.</p></div></header>
+<div class="settings-grid">
+<section class="panel">
+  <h2>Profile</h2>
+  <p>Your permanent public handle is <strong>@{{ user.handle }}</strong>.</p>
+  <form method="post" novalidate>{% csrf_token %}{% include 'accounts/_fields.html' %}<button class="button primary" type="submit">Save profile</button></form>
+</section>
+<section class="panel">
+  <h2>Sign in and security</h2>
+  <dl><dt>Email</dt><dd>{{ user.email }}</dd><dt>Email verification</dt><dd>{% if user.verified_at %}Verified{% else %}Incomplete — verify before moving money{% endif %}</dd><dt>Authenticator</dt><dd>{% if user.mfa_confirmed %}Enrolled{% else %}Enrollment required{% endif %}</dd></dl>
+  {% if user.outgoing_cooldown_until %}<p>Security recovery outgoing cooldown ends {{ user.outgoing_cooldown_until|date:'c' }}.</p>{% endif %}
+  <ul class="account-links">
+    {% if not user.verified_at %}<li><a href="{% url 'accounts:verification_resend' %}">Send verification message</a></li>{% endif %}
+    {% if not user.mfa_confirmed %}<li><a href="{% url 'accounts:mfa_enroll' %}">Set up authenticator</a></li>{% endif %}
+    <li><a href="{% url 'accounts:email_change' %}">Change email</a></li>
+    <li><a href="{% url 'accounts:password_reset' %}">Reset password</a></li>
+    <li><a href="{% url 'accounts:sessions' %}">Review signed in sessions</a></li>
+    <li><a href="{% url 'accounts:mfa_recover' %}">Recover authenticator access</a></li>
+  </ul>
+</section>
+<section class="panel">
+  <h2>Your data and account closure</h2>
+  <p>Export your profile, balances, activity and customer case dispositions. Financial attribution is retained for the lifetime of this local dataset.</p>
+  <p><a href="/account/data/">Create private account export</a></p>
+  <p>Closing requires a zero balance and no outstanding obligations or dispute windows. Closed accounts cannot sign in to retrieve statements. Download your final export first.</p>
+  <p><a href="/account/data/">Review closure eligibility</a></p>
+</section>
+</div>
+{% endblock %}

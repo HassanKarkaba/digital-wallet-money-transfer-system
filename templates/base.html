@@ -1,0 +1,46 @@
+{% load static wallet_ui %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+<meta name="referrer" content="same-origin">
+<title>{% block title %}Wallet{% endblock %} · Demo Wallet</title>
+<link rel="stylesheet" href="{% static 'app/wallet.css' %}">
+<script src="{% static 'app/wallet.js' %}" defer></script>
+</head>
+<body class="{% if user.is_authenticated %}authenticated{% else %}public{% endif %}">
+<a href="#main" class="skip-link">Skip to main content</a>
+{% if user.is_authenticated %}
+<aside class="sidebar" aria-label="Main navigation">
+<a class="brand" href="/wallet/"><span class="brand-mark" aria-hidden="true">w</span><span>Wallet<span class="brand-tag">DEMO</span></span></a>
+<div class="workspace-label">PERSONAL WALLET</div>
+<nav class="nav-group">
+<a href="/wallet/" {% if page == 'wallet' %}aria-current="page"{% endif %}><span aria-hidden="true">◫</span> Overview</a>
+<a href="/activity/" {% if page == 'activity' %}aria-current="page"{% endif %}><span aria-hidden="true">↗</span> Activity</a>
+<a href="/send/" {% if page == 'money' %}aria-current="page"{% endif %}><span aria-hidden="true">⇄</span> Move money</a>
+<a href="/requests/" {% if page == 'requests' %}aria-current="page"{% endif %}><span aria-hidden="true">↙</span> Requests</a>
+<a href="/schedules/" {% if page == 'schedules' %}aria-current="page"{% endif %}><span aria-hidden="true">◷</span> Scheduled</a>
+</nav>
+<div class="workspace-label">MANAGE</div>
+<nav class="nav-group">
+<a href="/recipients/" {% if page == 'recipients' %}aria-current="page"{% endif %}><span aria-hidden="true">♧</span> Recipients</a>
+<a href="/destinations/" {% if page == 'destinations' %}aria-current="page"{% endif %}><span aria-hidden="true">▤</span> Destinations</a>
+<a href="/statements/" {% if page == 'statements' %}aria-current="page"{% endif %}><span aria-hidden="true">▧</span> Statements</a>
+<a href="/accounts/profile/" {% if page == 'settings' %}aria-current="page"{% endif %}><span aria-hidden="true">⚙</span> Account & security</a>
+{% if has_staff_role or user.is_staff %}<a href="/staff/" {% if page == 'staff' %}aria-current="page"{% endif %}><span aria-hidden="true">◇</span> Staff workspace</a>{% endif %}
+</nav>
+<details class="mobile-manage"><summary>Manage wallet <span aria-hidden="true">⌄</span></summary><nav aria-label="Manage your wallet"><a href="/recipients/">Recipients</a><a href="/destinations/">Destinations</a><a href="/statements/">Statements</a><a href="/accounts/profile/">Account & security</a>{% if has_staff_role or user.is_staff %}<a href="/staff/">Staff workspace</a>{% endif %}</nav></details><div class="sidebar-bottom"><div class="local-state"><span class="status-dot" aria-hidden="true"></span> Local demonstration</div><p>No real funds. No cash value.</p><a class="profile-chip" href="/accounts/profile/"><span class="avatar">{{ user.display_name|initial }}</span><span><strong>{{ user.display_name|default:user.handle }}</strong><small>@{{ user.handle }}</small></span></a></div>
+</aside>
+{% endif %}
+<div class="app-shell">
+<header class="topbar">
+{% if not user.is_authenticated %}<a class="brand" href="/"><span class="brand-mark" aria-hidden="true">w</span><span>Wallet<span class="brand-tag">DEMO</span></span></a>{% else %}<div class="topbar-label">Your personal wallet <span class="separator">/</span> <span>USD</span></div>{% endif %}
+<div class="topbar-actions">{% if user.is_authenticated %}<a class="icon-link" href="/notifications/" aria-label="Notifications"><span aria-hidden="true">♧</span><span class="hide-small">Notifications</span></a><form method="post" action="/accounts/logout/" class="inline-form">{% csrf_token %}<button class="text-button" type="submit">Sign out</button></form>{% else %}<a class="text-link" href="/accounts/login/">Sign in</a><a class="button small" href="/accounts/register/">Create a wallet <span aria-hidden="true">↗</span></a>{% endif %}</div>
+</header>
+<div class="simulation-banner"><span class="simulation-icon" aria-hidden="true">i</span><span><strong>Simulation mode.</strong> All balances and transfers are demonstration money with no cash value.</span></div>
+<main id="main" tabindex="-1" class="main-content">
+{% if messages %}<div class="messages" aria-live="polite">{% for message in messages %}<div class="notice {{ message.tags }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+<footer class="page-footer"><span>Demo Wallet · USD only</span><span>Local simulation · Zero fees · No real bank connection</span></footer>
+</div>
+</body></html>

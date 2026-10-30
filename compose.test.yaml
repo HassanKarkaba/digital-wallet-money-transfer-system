@@ -1,0 +1,93 @@
+name: dwmt-verify
+x-test: &test
+  build:
+    context: .
+    target: verification
+  image: dwmt-verification:latest
+  entrypoint: [sh, scripts/test-entrypoint.sh]
+  environment:
+    PRIVATE_ROOT: /private
+    EMAIL_FILE_PATH: /mail
+    RECOVERY_MARKER_PATH: /recovery/marker.json
+  volumes:
+    - test_config:/test-config:ro
+    - test_private:/private
+    - test_mail:/mail
+    - test_recovery:/recovery
+  logging: &bounded-test-logs
+    driver: local
+    options: {max-size: 10m, max-file: '3'}
+  init: true
+  stop_grace_period: 30s
+x-runtime: &test-runtime
+  <<: *test
+  volumes:
+    - type: volume
+      source: test_config
+      target: /test-config
+      read_only: true
+      volume: {subpath: app}
+    - test_private:/private
+    - test_mail:/mail
+    - test_recovery:/recovery
+services:
+  configure:
+    build:
+      context: .
+      target: verification
+    image: dwmt-verification:latest
+    command: [python, manage.py, init_demo_config, --output, /test-config/runtime.env, --test, --reuse-test]
+    volumes: [test_config:/test-config]
+  db:
+    image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
+    entrypoint: [sh, /scripts/test-db.sh]
+    volumes:
+      - test_database:/var/lib/postgresql/data
+      - type: volume
+        source: test_config
+        target: /test-config
+        read_only: true
+        volume: {subpath: db}
+      - ./scripts:/scripts:ro
+      - ./scripts/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh:ro
+    logging: *bounded-test-logs
+    command: [-c, log_min_error_statement=panic, -c, log_error_verbosity=terse, -c, log_statement=none]
+    environment: {POSTGRES_USER: postgres}
+    depends_on:
+      configure: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    <<: *test
+    command: [sh, scripts/migrate.sh]
+    depends_on:
+      db: {condition: service_healthy}
+  web:
+    <<: *test-runtime
+    command: [gunicorn, 'config.wsgi:application', --bind, '0.0.0.0:8000', --workers, '3', --threads, '4', --timeout, '15', --access-logfile, /dev/null]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  worker:
+    <<: *test-runtime
+    command: [python, manage.py, run_worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  simulator:
+    <<: *test-runtime
+    command: [python, manage.py, run_simulator]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  tests:
+    <<: *test
+    command: [sh, scripts/test.sh]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+volumes:
+  test_config:
+  test_database:
+  test_private:
+  test_mail:
+  test_recovery:

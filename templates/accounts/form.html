@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="panel account-panel">
+  <p class="eyebrow">Account security</p>
+  <h1>{{ title }}</h1>
+  {% if intro %}<p>{{ intro }}</p>{% endif %}
+  {% if secret %}
+  <div class="notice">
+    <h2>Authenticator setup secret</h2>
+    <p>Enter this secret in your authenticator. Keep it private.</p>
+    <p><code>{{ secret }}</code></p>
+    <details><summary>Manual provisioning URI</summary><p class="break-word"><code>{{ provisioning_uri }}</code></p></details>
+  </div>
+  {% endif %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    {% include 'accounts/_fields.html' %}
+    <button type="submit" class="button primary">{{ button }}</button>
+  </form>
+  {% if links %}<nav aria-label="Account options"><ul class="account-links">{% for label,url in links %}<li><a href="{{ url }}">{{ label }}</a></li>{% endfor %}</ul></nav>{% endif %}
+</section>
+{% endblock %}

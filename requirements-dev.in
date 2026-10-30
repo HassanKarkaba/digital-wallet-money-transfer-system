@@ -1,0 +1,5 @@
+-r requirements.in
+pip-audit>=2.9,<3
+ruff>=0.14,<1
+playwright>=1.56,<2
+pip-tools>=7.5,<8

@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %}Manage staff access{% endblock %}
+{% block content %}
+<header class="page-heading"><div><p class="eyebrow">Access administration</p><h1>Manage staff access</h1><p>Invite one exact synthetic email or change a registered account’s permissions. Review and confirm each bound instruction with a new authenticator code.</p></div></header>
+<div class="settings-grid">
+<section class="panel">
+  <h2>Prepare an access instruction</h2>
+  <p>Invitations grant no authority. A role grant requires a registered account with verified email and confirmed MFA. Role changes revoke that account’s sessions.</p>
+  <form method="post" novalidate>{% csrf_token %}{% include 'accounts/_fields.html' %}<button type="submit" class="button primary">Review access instruction</button></form>
+</section>
+<section class="panel">
+  <h2>Recent invitations</h2>
+  {% for invitation in invitations %}
+  <article><h3>{{ invitation.email }}</h3><p>{{ invitation.get_role_display }} · {{ invitation.state }}</p><p><code>{{ invitation.id }}</code></p><p>{{ invitation.created_at|date:'c' }}</p></article>
+  {% empty %}<p>No staff invitations yet.</p>{% endfor %}
+  <p>Showing up to the 50 most recent invitations.</p>
+</section>
+</div>
+{% endblock %}
