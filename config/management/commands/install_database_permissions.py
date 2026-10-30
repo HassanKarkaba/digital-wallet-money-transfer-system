@@ -30,6 +30,7 @@ class Command(BaseCommand):
                 'REVOKE DELETE ON public.payments_operation,public.payments_replaykey FROM wallet_runtime'
             )
             c.execute('REVOKE UPDATE ON public.payments_replaykey FROM wallet_runtime')
+            c.execute('REVOKE UPDATE,DELETE ON public.payments_legacyintentreference FROM wallet_runtime')
             c.execute(
                 "SELECT p.oid::regprocedure::text FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.proname LIKE 'dwmt_%'"
             )

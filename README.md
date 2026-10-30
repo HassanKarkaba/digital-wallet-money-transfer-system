@@ -161,6 +161,8 @@ Overlapping financial actions follow a common lock order: action advisory key, s
 
 When updating dependencies, resolve the declared supported version families into new hash locks, inspect notices and vulnerability results, rebuild both images, and rerun affected database, browser and recovery checks. Check migrations with `makemigrations --check --dry-run` in the isolated environment. Do not remove historical migration inputs or reset a database to hide a failed migration. See `THIRD_PARTY_NOTICES.md` for upstream licensing references.
 
+For an existing dataset, stop `web`, `worker` and `simulator` before applying migrations with `docker compose run --rm migrate`, then restart those services and check readiness. Keep the named development volumes through this upgrade sequence. Migration of older accepted actions captures compact proof references before ordinary proof expiry; it preserves the existing action keys and financial history.
+
 For a clean reconstruction, copy or check out the retained source into a new path, generate a new private configuration, and repeat the documented image/setup and isolated verification commands. No developer-home path, original checkout, host Python installation or existing database should be required. Keep receipts, evidence and the final implementation report outside the checked candidate.
 
 ## Destructive development reset

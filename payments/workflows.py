@@ -1567,15 +1567,10 @@ def resolve_accepted_action(actor, action_key, intent_id=None, family=None):
     from accounts.services import rate_limit
 
     rate_limit('status', actor.pk, 60, 60)
+    from .replay import match_accepted_reference
+
     key = _uuid(action_key)
-    query = ReplayKey.objects.filter(owner=actor, action_key=key)
-    if intent_id:
-        query = query.filter(intent_id=intent_id)
-    if family:
-        query = query.filter(family=family)
-    preliminary = query.first()
-    if not preliminary:
-        raise DomainError('No accepted action matches this reference.', 'DENIED', 404)
+    preliminary = match_accepted_reference(actor, key, intent_id=intent_id, family=family)
     with transaction.atomic():
         _advisory(actor.pk, preliminary.family, key)
         _gate(False)
@@ -1590,7 +1585,9 @@ def resolve_accepted_action(actor, action_key, intent_id=None, family=None):
         )
         if role:
             _eligible(current, role=role)
-        replay = ReplayKey.objects.get(pk=preliminary.pk, owner=current)
+        replay = match_accepted_reference(current, key, intent_id=intent_id, family=preliminary.family)
+        if replay.pk != preliminary.pk:
+            raise DomainError('The accepted action reference changed.', 'CONFLICT', 409)
         result = _replay_target(replay)
         if role:
             record(

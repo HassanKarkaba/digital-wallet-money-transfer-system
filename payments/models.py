@@ -107,6 +107,15 @@ class ReplayKey(models.Model):
         constraints = [models.UniqueConstraint(fields=['owner', 'family', 'action_key'], name='replay_scope')]
 
 
+class LegacyIntentReference(models.Model):
+    """Minimal retained input identity for accepted keys predating intent links."""
+
+    id = models.UUIDField(primary_key=True, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    family = models.CharField(max_length=24)
+    digest = models.CharField(max_length=64)
+
+
 class MoneyRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     requester = models.ForeignKey(

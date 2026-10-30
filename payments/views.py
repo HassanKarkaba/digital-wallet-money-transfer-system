@@ -17,7 +17,16 @@ from django.views.decorators.http import require_GET, require_POST
 from accounts.services import SecurityError, assert_eligible
 from payments import forms, workflows
 from payments.errors import DomainError
-from payments.models import Intent, MoneyRequest, Operation, Recipient, ReplayKey, Schedule
+from payments.models import (
+    Intent,
+    LegacyIntentReference,
+    MoneyRequest,
+    Operation,
+    Recipient,
+    ReplayKey,
+    Schedule,
+)
+from payments.replay import match_accepted_reference
 from rails.models import Destination
 
 
@@ -462,6 +471,7 @@ def intent_review(request, intent_id):
     intent = Intent.objects.select_related('owner').filter(id=intent_id, owner=request.user).first()
     if not intent:
         accepted = ReplayKey.objects.filter(owner=request.user, intent_id=intent_id).first()
+        retained = LegacyIntentReference.objects.filter(owner=current, pk=intent_id).exists()
         return render(
             request,
             'payments/error.html',
@@ -472,7 +482,7 @@ def intent_review(request, intent_id):
                 if accepted
                 else None,
             },
-            status=410 if accepted else 404,
+            status=410 if accepted or retained else 404,
         )
     key_name = 'action:' + str(intent.id)
     accepted = (
@@ -482,6 +492,16 @@ def intent_review(request, intent_id):
     )
     action_key = str(accepted.action_key) if accepted else request.session.get(key_name)
     if not action_key:
+        if intent.consumed_at:
+            return render(
+                request,
+                'payments/error.html',
+                {
+                    'error': 'This review was consumed. Check Activity or use the original accepted action reference before starting another instruction.',
+                    'code': 'REVIEW_CONSUMED',
+                },
+                status=410,
+            )
         action_key = str(uuid.uuid4())
         request.session[key_name] = action_key
     return render(
@@ -533,9 +553,7 @@ def verify_and_confirm(request, intent_id):
             or request.POST.get('schema_version', '1') != '1'
         ):
             raise DomainError('This confirmation schema is unsupported.', 'STALE', 409)
-        accepted = ReplayKey.objects.filter(owner=request.user, intent_id=intent_id, action_key=key).first()
-        if not accepted:
-            raise DomainError('No accepted action matches this reference.', 'DENIED', 404)
+        accepted = match_accepted_reference(request.user, key, intent_id=intent_id)
         rate_limit('status', str(request.user.id), 60, 60)
         result = workflows.resolve_accepted_action(
             request.user, key, intent_id=intent_id, family=accepted.family
@@ -911,10 +929,10 @@ def request_action(request, request_id, action):
                     key = uuid.UUID(request.POST.get('action_key', ''))
                 except (ValueError, TypeError, AttributeError):
                     raise DomainError('Use the original request action key.')
-                accepted = ReplayKey.objects.filter(
-                    owner=request.user, family='REQUEST_PAY', intent_id=proof_id, action_key=key
-                ).first()
-                if not accepted or accepted.operation_id != item.operation_id:
+                accepted = match_accepted_reference(
+                    request.user, key, family='REQUEST_PAY', intent_id=proof_id
+                )
+                if not accepted.operation_id or accepted.operation_id != item.operation_id:
                     raise DomainError('No accepted payment matches this exact request.', 'CONFLICT', 409)
             elif proof.instruction.get('request_id') != str(item.id):
                 raise DomainError('This proof is bound to a different request.', 'DENIED', 403)

@@ -85,6 +85,7 @@ def enforcement_ready(check_runtime_role=True):
         ('payments_operation', 'operation_consistency'),
         ('payments_operation', 'operation_instruction'),
         ('payments_replaykey', 'immutable_replay'),
+        ('payments_legacyintentreference', 'immutable_legacy_intent_reference'),
         ('payments_schedule', 'fixed_schedule'),
         ('payments_moneyrequest', 'fixed_request'),
         ('audit_auditevent', 'immutable_audit'),
@@ -131,7 +132,10 @@ def enforcement_ready(check_runtime_role=True):
               AND NOT has_table_privilege('ledger_journal','INSERT,UPDATE,DELETE')
               AND NOT has_table_privilege('ledger_entry','INSERT,UPDATE,DELETE')
               AND NOT has_table_privilege('ledger_reservation','INSERT,UPDATE,DELETE')
-              AND NOT has_table_privilege('audit_auditevent','UPDATE,DELETE')""")
+              AND NOT has_table_privilege('audit_auditevent','UPDATE,DELETE')
+              AND has_table_privilege('payments_legacyintentreference','SELECT')
+              AND has_table_privilege('payments_legacyintentreference','INSERT')
+              AND NOT has_table_privilege('payments_legacyintentreference','UPDATE,DELETE')""")
             if not cursor.fetchone()[0]:
                 return False
     return True

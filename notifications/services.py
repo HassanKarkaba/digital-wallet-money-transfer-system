@@ -162,12 +162,14 @@ def cleanup_private_files():
     from accounts.models import RateBucket
 
     RateBucket.objects.filter(started_at__lt=now - timedelta(hours=24)).delete()
-    # Unaccepted intents can expire without erasing accepted action identities.
-    from django.db.models import Q
+    from payments.replay import MAX_PURGE_BATCH, purge_intent_batch
 
-    from payments.models import Intent
+    # Each transaction is bounded; old proof/grant/instruction material expires
+    # while minimal accepted legacy input fingerprints remain.
+    for _ in range(10):
+        if purge_intent_batch(now) < MAX_PURGE_BATCH:
+            break
+    else:
+        from work.services import enqueue
 
-    Intent.objects.filter(
-        Q(consumed_at__lt=now - timedelta(days=7))
-        | Q(consumed_at__isnull=True, expires_at__lt=now - timedelta(days=7))
-    ).delete()
+        enqueue('CLEANUP', 'global', key=f'cleanup:proof:{uuid.uuid4()}')
