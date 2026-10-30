@@ -26,22 +26,29 @@ def bind_request(request):
         request_authority.reset(token)
 
 
-def assert_request_authority(actor, now):
+def assert_request_authority(actor, now=None):
+    from accounts.services import db_now
+
     context = request_authority.get()
     if context is None:
-        return  # Explicit workers/commands use their own authority.
+        return  # Workers and explicit local commands carry their own authority.
     if context['actor_id'] != actor.pk:
         raise DomainError('Request authority does not match this actor.', 'DENIED', 403)
     tracked = UserSession.objects.filter(user=actor, session_key=context['session_key']).first()
+    session_exists = Session.objects.filter(session_key=context['session_key']).exists()
+    now = db_now()
     if (
         not tracked
         or tracked.revoked_at
         or tracked.authority_version != actor.authority_version
         or now >= tracked.started_at + timedelta(hours=12)
         or now >= tracked.last_seen + timedelta(minutes=30)
-        or not Session.objects.filter(session_key=context['session_key']).exists()
+        or not session_exists
     ):
         raise DomainError('Your session ended. Sign in again before continuing.', 'DENIED', 403)
+    context['deadline'] = min(
+        tracked.started_at + timedelta(hours=12), tracked.last_seen + timedelta(minutes=30)
+    )
 
 
 def assert_request_deadline(actor, now):
