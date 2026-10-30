@@ -10,7 +10,7 @@ Run these commands from the repository root in a POSIX shell. Docker Engine and 
 
 ```sh
 docker compose build
-docker compose run --rm --no-deps --volume "$PWD:/bootstrap" web python manage.py init_demo_config --output /bootstrap/.env
+docker compose run --rm --no-deps --user "$(id -u):$(id -g)" --volume "$PWD:/bootstrap" web python manage.py init_demo_config --output /bootstrap/.env
 docker compose up -d db
 docker compose run --rm migrate
 docker compose run --rm web python manage.py seed_demo --access-file /private/demo-access.txt
@@ -21,7 +21,7 @@ docker compose exec web python manage.py verify_ledger
 
 Open [the local wallet](http://localhost:8000). The host port is bound to `127.0.0.1`; the database has no published host port. If port 8000 is occupied, stop the conflicting service or use an explicit Compose override that binds another loopback port.
 
-The bootstrap command can run before configuration exists. It creates `.env` with random private credentials and refuses to overwrite an existing file. Never commit this file or reuse these demonstration credentials elsewhere. `.env.example` documents the configuration names without supplying secrets. Runtime settings reject non-DEMO mode and database aliases that share a name or role. Do not change monetary policy through environment variables.
+The bootstrap command can run before configuration exists. It uses your host user ID to create `.env` with your ownership and random private credentials, and refuses to overwrite an existing file. Never commit this file or reuse these demonstration credentials elsewhere. `.env.example` documents the configuration names without supplying secrets. Runtime settings reject non-DEMO mode and database aliases that share a name or role. Do not change monetary policy through environment variables.
 
 The normal image contains the application, templates, migrations and collected static assets. Installer tooling and bundled bootstrap wheels are removed from the runtime stage; the separate verification stage retains its locked checking tools. It does not depend on a source bind mount. The bootstrap command above is the limited exception: the bind lets configuration be written to this checkout. Named volumes retain the database, local mail, private exports and the independent recovery marker.
 
