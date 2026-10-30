@@ -4,9 +4,10 @@ import threading
 import time
 import uuid
 
-from django.core.management.base import BaseCommand
-from django.db import close_old_connections, connections
+from django.core.management.base import BaseCommand, CommandError
+from django.db import close_old_connections
 
+from work.management.reconnect import TRANSPORT_ERRORS, close_owned_connections, reconnect_delay
 from work.services import claim_jobs, discover_work, extend_lease, finish_job, heartbeat, observe_clock
 
 
@@ -75,14 +76,23 @@ def perform(job):
 
 
 def lease_heartbeat(jobs, stop_event, identity):
-    close_old_connections()
+    failures = 0
     try:
         while not stop_event.wait(10):
-            heartbeat(identity)
-            for job in jobs:
-                extend_lease(job.pk, job.generation)
+            try:
+                close_old_connections()
+                heartbeat(identity)
+                for job in jobs:
+                    extend_lease(job.pk, job.generation)
+            except TRANSPORT_ERRORS:
+                close_owned_connections()
+                failures += 1
+                if stop_event.wait(reconnect_delay(failures)):
+                    return
+            else:
+                failures = 0
     finally:
-        connections.close_all()
+        close_owned_connections()
 
 
 class Command(BaseCommand):
@@ -100,10 +110,25 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, lambda *_: stopping.set())
         signal.signal(signal.SIGINT, lambda *_: stopping.set())
         identity = f'worker:{os.getpid()}:{uuid.uuid4()}'
+        try:
+            batches = self.run_loop(stopping, options, identity)
+        finally:
+            try:
+                heartbeat(identity, state='STOPPED')
+            except TRANSPORT_ERRORS:
+                # Preserve the original interruption/failure. The old heartbeat
+                # expires normally when the primary store cannot be reached.
+                pass
+            finally:
+                close_owned_connections()
+        self.stdout.write(f'Worker completed {batches} nonempty batches.')
+
+    def run_loop(self, stopping, options, identity):
         batches = 0
         last_discovery = 0.0
-        try:
-            while not stopping.is_set():
+        failures = 0
+        while not stopping.is_set():
+            try:
                 close_old_connections()
                 heartbeat(identity)
                 observe_clock()
@@ -121,42 +146,56 @@ class Command(BaseCommand):
                     target=lease_heartbeat, args=(jobs, stop_lease, identity), daemon=True
                 )
                 thread.start()
-                for job in jobs:
-                    if stopping.is_set():
-                        break
-                    # Unstarted claims safely become eligible again when their lease expires.
-                    started = time.monotonic()
-                    try:
-                        perform(job)
-                        budget = 30 if job.kind == 'STATEMENT' else 20
-                        if time.monotonic() - started > budget:
-                            finish_job(
-                                job.pk,
-                                job.generation,
-                                success=False,
-                                detail='Worker elapsed budget exceeded; inspect current authoritative state.',
+                try:
+                    for job in jobs:
+                        if stopping.is_set():
+                            break
+                        # Claimed but unstarted work stays durable until its lease
+                        # expires; shutdown and reconnect never release money.
+                        started = time.monotonic()
+                        try:
+                            perform(job)
+                            budget = 30 if job.kind == 'STATEMENT' else 20
+                            if time.monotonic() - started > budget:
+                                finish_job(
+                                    job.pk,
+                                    job.generation,
+                                    success=False,
+                                    detail='Worker elapsed budget exceeded; inspect current authoritative state.',
+                                )
+                            else:
+                                finish_job(job.pk, job.generation)
+                        except Exception as exc:
+                            # Existing per-job accounting/retry policy is retained.
+                            # Never log exception messages or provider payloads.
+                            detail = (
+                                'Awaiting authoritative result.'
+                                if isinstance(exc, RetryWork)
+                                else type(exc).__name__
                             )
-                        else:
-                            finish_job(job.pk, job.generation)
-                    except Exception as exc:
-                        # Type only: never log secrets from exception text or provider payloads.
-                        detail = (
-                            'Awaiting authoritative result.'
-                            if isinstance(exc, RetryWork)
-                            else type(exc).__name__
-                        )
-                        finish_job(job.pk, job.generation, success=False, detail=detail)
-                        self.stderr.write(f'job {job.pk}: {detail}')
-                    heartbeat(identity)
-                stop_lease.set()
-                thread.join(timeout=1)
-                if options['once'] or (options['max_batches'] and batches >= options['max_batches']):
+                            finish_job(job.pk, job.generation, success=False, detail=detail)
+                            self.stderr.write(f'job {job.pk}: {detail}')
+                        heartbeat(identity)
+                finally:
+                    stop_lease.set()
+                    thread.join(timeout=1)
+            except TRANSPORT_ERRORS:
+                close_owned_connections()
+                failures += 1
+                if options['once'] and failures >= 6:
+                    raise CommandError(
+                        'Database unavailable after six bounded single-pass reconnect attempts.'
+                    ) from None
+                delay = reconnect_delay(failures)
+                self.stderr.write(
+                    f'Worker database transport unavailable; retrying in {delay}s. Durable responsibility is retained.'
+                )
+                if stopping.wait(delay):
                     break
-                if not jobs:
-                    stopping.wait(1)
-        finally:
-            try:
-                heartbeat(identity, state='STOPPED')
-            finally:
-                connections.close_all()
-        self.stdout.write(f'Worker completed {batches} nonempty batches.')
+                continue
+            failures = 0
+            if options['once'] or (options['max_batches'] and batches >= options['max_batches']):
+                break
+            if not jobs:
+                stopping.wait(1)
+        return batches

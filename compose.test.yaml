@@ -67,7 +67,7 @@ services:
       db: {condition: service_healthy}
   web:
     <<: *test-runtime
-    command: [gunicorn, 'config.wsgi:application', --bind, '0.0.0.0:8000', --workers, '3', --threads, '4', --timeout, '15', --access-logfile, /dev/null]
+    command: [gunicorn, 'config.wsgi:application', --bind, '0.0.0.0:8000', --workers, '3', --threads, '4', --timeout, '15', --access-logfile, /dev/null, --no-control-socket]
     depends_on:
       migrate: {condition: service_completed_successfully}
   worker:

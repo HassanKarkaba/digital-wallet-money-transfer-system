@@ -12,7 +12,7 @@ COPY . .
 RUN DJANGO_SETTINGS_MODULE=config.collect python manage.py collectstatic --noinput
 USER wallet
 EXPOSE 8000
-CMD ["gunicorn","config.wsgi:application","--bind","0.0.0.0:8000","--workers","3","--threads","4","--timeout","15","--access-logfile","/dev/null"]
+CMD ["gunicorn","config.wsgi:application","--bind","0.0.0.0:8000","--workers","3","--threads","4","--timeout","15","--access-logfile","/dev/null","--no-control-socket"]
 
 FROM dependencies AS verification
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/browsers
@@ -21,4 +21,4 @@ RUN pip install --no-cache-dir --require-hashes -r requirements-dev.lock && play
 COPY . .
 RUN DJANGO_SETTINGS_MODULE=config.collect python manage.py collectstatic --noinput
 USER wallet
-CMD ["gunicorn","config.wsgi:application","--bind","0.0.0.0:8000","--workers","3","--threads","4","--timeout","15","--access-logfile","/dev/null"]
+CMD ["gunicorn","config.wsgi:application","--bind","0.0.0.0:8000","--workers","3","--threads","4","--timeout","15","--access-logfile","/dev/null","--no-control-socket"]

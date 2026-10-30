@@ -68,6 +68,8 @@ docker compose stop
 
 Liveness proves only that the web process responds. Readiness distinguishes primary schema, integrity, recovery identity, worker heartbeat, simulator and private storage. Removing a dependency can block dependent admission while safe history reads remain available. Mail failure does not undo committed money. Ordinary stop, restart and rebuild preserve development volumes and admitted work.
 
+Workers retry transient database connection failures with a bounded, interruptible wait and retain their durable jobs. The simulator can continue independent provider work while its primary database heartbeat is unavailable; new application admission still requires healthy dependencies.
+
 ## Isolated verification
 
 Use the retained wrapper:
