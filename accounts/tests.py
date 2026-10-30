@@ -33,20 +33,23 @@ class AccountSecurityTests(TransactionTestCase):
         )
 
     def test_totp_counter_is_single_use_across_independent_connections(self):
-        barrier = threading.Barrier(2)
+        ready = threading.Barrier(3)
+        start = threading.Event()
         instant = datetime(2026, 10, 30, 12, 0, 1, tzinfo=timezone.utc)
         code = pyotp.TOTP(self.secret).at(instant)
         prefix = 'dwmt-totp-' + uuid.uuid4().hex
 
         def attempt(index):
             close_old_connections()
-            candidate = User.objects.get(pk=self.user.pk)
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT set_config('application_name', %s, false)", [prefix + '-' + str(index)]
-                )
-            barrier.wait(timeout=5)
             try:
+                candidate = User.objects.get(pk=self.user.pk)
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT set_config('application_name', %s, false)", [prefix + '-' + str(index)]
+                    )
+                ready.wait(timeout=5)
+                if not start.wait(timeout=5):
+                    raise AssertionError('The main connection did not establish the held-row window.')
                 services.verify_totp(candidate, code)
                 return 'accepted'
             except services.SecurityError:
@@ -58,9 +61,13 @@ class AccountSecurityTests(TransactionTestCase):
             patch('accounts.services.db_now', return_value=instant),
             ThreadPoolExecutor(max_workers=2) as pool,
         ):
+            # Connection startup is fixture setup, not part of the held-row
+            # contention window. Both independent sessions must be ready first.
+            futures = [pool.submit(attempt, index) for index in range(2)]
+            ready.wait(timeout=5)
             with transaction.atomic():
                 User.objects.select_for_update().get(pk=self.user.pk)
-                futures = [pool.submit(attempt, index) for index in range(2)]
+                start.set()
                 deadline = time.monotonic() + 1.5
                 blocked = 0
                 while time.monotonic() < deadline:
@@ -75,8 +82,8 @@ class AccountSecurityTests(TransactionTestCase):
                         break
                     time.sleep(0.01)
             results = [future.result(timeout=5) for future in futures]
-        self.assertEqual(blocked, 2, 'Both independent proof attempts must reach the held security-row lock.')
         self.assertCountEqual(results, ['accepted', 'rejected'])
+        self.assertEqual(blocked, 2, 'Both independent proof attempts must reach the held security-row lock.')
         self.user.refresh_from_db()
         self.assertEqual(self.user.mfa_last_counter, int(instant.timestamp()) // 30)
         self.assertNotIn(self.secret, self.user.mfa_secret)
