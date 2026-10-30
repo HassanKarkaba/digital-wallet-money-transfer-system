@@ -48,7 +48,7 @@ class WalletFixtures:
             environment_id=settings.ENVIRONMENT_ID,
             recovery_generation=settings.RECOVERY_GENERATION,
         )
-        LedgerAccount.objects.create(kind='SYSTEM_CASH')
+        LedgerAccount.objects.get_or_create(kind='SYSTEM_CASH', defaults={'balance_cents': 0})
         initialize_identity()
 
     def customer(self, handle, roles=()):
