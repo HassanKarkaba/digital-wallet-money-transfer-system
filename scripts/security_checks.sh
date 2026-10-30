@@ -9,7 +9,7 @@ if [ "${1:-}" = '--image' ]; then
   exec docker scout cves --exit-code "local://$2"
 fi
 [ "$#" -eq 0 ] || { echo 'Usage: security_checks.sh [--image LOCAL_IMAGE]' >&2; exit 2; }
-python -m ruff check --select F63,F7,F82 .
+python -m ruff check --no-cache --select F63,F7,F82 .
 python manage.py check --deploy --fail-level ERROR
 python - <<'PY'
 from pathlib import Path
@@ -38,4 +38,4 @@ if findings:
     raise SystemExit('\n'.join(findings))
 print('Bounded source credential/archive scan passed; this is not exhaustive secret detection.')
 PY
-python -m pip_audit --strict --require-hashes -r requirements.lock --progress-spinner off
+python -m pip_audit --cache-dir /tmp/dwmt-pip-audit-cache --strict --require-hashes -r requirements.lock --progress-spinner off
