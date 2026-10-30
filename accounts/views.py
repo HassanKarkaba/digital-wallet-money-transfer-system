@@ -541,7 +541,11 @@ def email_change_confirm(request, token):
 @login_required
 @require_http_methods(['GET'])
 def sessions(request):
-    rows = UserSession.objects.filter(user=request.user, revoked_at__isnull=True).order_by('-started_at')
+    rows = list(
+        UserSession.objects.filter(user=request.user, revoked_at__isnull=True).order_by('-started_at')
+    )
+    for item in rows:
+        item.revoke_form = forms.SessionRevokeForm(auto_id=f'session_{item.pk}_%s')
     return render(
         request,
         'accounts/sessions.html',
@@ -549,7 +553,6 @@ def sessions(request):
             'title': 'Signed in sessions',
             'sessions': rows,
             'current_key': request.session.session_key,
-            'form': forms.SessionRevokeForm(),
         },
     )
 

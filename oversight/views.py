@@ -183,7 +183,7 @@ def case_detail(request, case_id):
         and case.type == 'DISPUTE'
         and case.state in ('OPEN', 'BLOCKED_FUNDS', 'BLOCKED_CAPACITY')
     )
-    decision_form = DecisionForm(initial={'version': case.version})
+    decision_form = DecisionForm(initial={'version': case.version}, auto_id='decision_%s')
     if case.type in ('DISPUTE', 'SUPPORT'):
         decision_form.fields['decision'].choices = [('CLOSE_NO_REFUND', 'Close without refund')]
     else:
@@ -198,8 +198,8 @@ def case_detail(request, case_id):
             'can_decide': can_decide,
             'can_propose': can_propose,
             'decision_form': decision_form,
-            'reason_form': ReasonForm(),
-            'assignment_form': CaseAssignmentForm(initial={'version': case.version}),
+            'reason_form': ReasonForm(auto_id='proposal_%s'),
+            'assignment_form': CaseAssignmentForm(initial={'version': case.version}, auto_id='assignment_%s'),
             'can_assign_finance': bool(request.staff_roles.intersection({'SUPPORT', 'REVIEWER'})),
             'can_inspect_statement': 'FINANCE' in request.staff_roles
             and case.assigned_finance_id == request.user.id,

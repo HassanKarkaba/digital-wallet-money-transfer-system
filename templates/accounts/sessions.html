@@ -7,7 +7,7 @@
   <h2>{% if session.session_key == current_key %}This session{% else %}Another session{% endif %}</h2>
   <p>Reference <code>{{ session.id }}</code></p>
   <dl><dt>Started</dt><dd>{{ session.started_at|date:'c' }}</dd><dt>Last activity</dt><dd>{{ session.last_seen|date:'c' }}</dd></dl>
-  <details><summary>Revoke this session</summary><form method="post" action="{% url 'accounts:session_revoke' session.id %}" novalidate>{% csrf_token %}{% include 'accounts/_fields.html' %}<button class="button" type="submit">Revoke session</button></form></details>
+  <details><summary>Revoke this session</summary><form method="post" action="{% url 'accounts:session_revoke' session.id %}" novalidate>{% csrf_token %}{% with form=session.revoke_form %}{% include 'accounts/_fields.html' %}{% endwith %}<button class="button" type="submit">Revoke session</button></form></details>
 </section>
 {% empty %}<p>No active sessions.</p>{% endfor %}
 <p><a href="{% url 'accounts:profile' %}">Return to account settings</a></p>
