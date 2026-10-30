@@ -13,6 +13,8 @@ import re
 import sys
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from datetime import timedelta
 from email import policy
 from email.parser import BytesParser
@@ -27,6 +29,7 @@ django.setup()
 import pyotp
 from django.conf import settings
 from django.core.management import call_command
+from django.db import connections
 from playwright.sync_api import expect, sync_playwright
 
 from accounts.models import SecurityMail, User
@@ -39,6 +42,19 @@ from rails.models import Destination
 
 def by_label(page, name):
     return page.get_by_label(re.compile(r'^\s*' + re.escape(name) + r':?\s*$'))
+
+
+@contextmanager
+def database_thread():
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='browser-fixture-db') as executor:
+
+        def run(call):
+            return executor.submit(call).result()
+
+        try:
+            yield run
+        finally:
+            executor.submit(connections.close_all).result()
 
 
 def main():
@@ -59,14 +75,17 @@ def main():
     errors = []
 
     def observed(case, detail):
-        observations.append({'case': case, 'detail': detail, 'observed_at': db_now().isoformat()})
+        observations.append({'case': case, 'detail': detail, 'observed_at': database(db_now).isoformat()})
         print('Browser passed:', case, flush=True)
 
     def fresh_code(user):
+        def refresh_counter():
+            user.refresh_from_db()
+            return int(db_now().timestamp()) // 30
+
         deadline = time.monotonic() + 65
         while time.monotonic() < deadline:
-            user.refresh_from_db()
-            counter = int(db_now().timestamp()) // 30
+            counter = database(refresh_counter)
             step = max(counter, user.mfa_last_counter + 1)
             if step <= counter + 1:
                 return pyotp.TOTP(decrypt_secret(user.mfa_secret)).generate_otp(step)
@@ -86,7 +105,7 @@ def main():
         by_label(page, 'Email').fill(credential['email'])
         by_label(page, 'Password').fill(credential['password'])
         by_label(page, 'Password').press('Enter')
-        user = User.objects.get(email=credential['email'])
+        user = database(lambda: User.objects.get(email=credential['email']))
         if user.mfa_confirmed:
             by_label(page, 'Authenticator code').fill(fresh_code(user))
             page.get_by_role('button', name='Verify and sign in').click()
@@ -96,14 +115,15 @@ def main():
     def settle(page, operation_id):
         deadline = time.monotonic() + 70
         while time.monotonic() < deadline:
-            operation = Operation.objects.get(pk=operation_id)
+            operation = database(lambda: Operation.objects.get(pk=operation_id))
             if operation.state in ('COMPLETED', 'FAILED', 'CANCELLED', 'UNKNOWN'):
                 page.goto(base + f'/payments/{operation_id}/')
                 return operation
             time.sleep(1)
         raise AssertionError('Accepted synthetic payment did not reach a recorded result within 70 seconds')
 
-    with sync_playwright() as p:
+    connections.close_all()
+    with database_thread() as database, sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=['--no-sandbox'])
         context = browser.new_context(
             viewport={'width': 1440, 'height': 1040}, java_script_enabled=False, accept_downloads=True
@@ -122,12 +142,12 @@ def main():
         by_label(page, 'Password').fill(password)
         page.get_by_role('button', name='Create account').click()
         expect(page.get_by_role('heading', name='Welcome back')).to_be_visible()
-        user = User.objects.get(email=email)
-        mail = SecurityMail.objects.filter(user=user, purpose='VERIFY').latest('created_at')
+        user = database(lambda: User.objects.get(email=email))
+        mail = database(lambda: SecurityMail.objects.filter(user=user, purpose='VERIFY').latest('created_at'))
         deadline = time.monotonic() + 65
         while mail.status != 'DELIVERED' and time.monotonic() < deadline:
             time.sleep(1)
-            mail.refresh_from_db()
+            database(mail.refresh_from_db)
         assert mail.status == 'DELIVERED', (
             'Local verification mail was not durably captured within 65 seconds'
         )
@@ -151,7 +171,7 @@ def main():
         page.get_by_role('button', name='Sign in', exact=True).click()
         expect(page.get_by_text('One more step before moving money.')).to_be_visible()
         page.get_by_role('link', name='Set up your authenticator').click()
-        user.refresh_from_db()
+        database(user.refresh_from_db)
         by_label(page, 'Authenticator code').fill(fresh_code(user))
         page.get_by_role('button', name='Confirm authenticator').click()
         expect(page.locator('.recovery-codes li')).to_have_count(10)
@@ -179,10 +199,16 @@ def main():
         expect(
             page.get_by_text('Synthetic destination linked. It becomes available after ten minutes.')
         ).to_be_visible()
-        destination = Destination.objects.get(owner=user, label='Browser synthetic checking')
-        assert destination.activation_at > db_now() + timedelta(minutes=9)
+        destination = database(
+            lambda: Destination.objects.get(owner=user, label='Browser synthetic checking')
+        )
+        assert destination.activation_at > database(db_now) + timedelta(minutes=9)
         # Explicit isolated clock fixture: keep UI waiting disclosure; advance only the activation boundary.
-        Destination.objects.filter(pk=destination.pk).update(activation_at=db_now() - timedelta(seconds=1))
+        database(
+            lambda: Destination.objects.filter(pk=destination.pk).update(
+                activation_at=db_now() - timedelta(seconds=1)
+            )
+        )
         observed(
             'destination',
             'Browser bound-MFA linking created a synthetic token with ten-minute activation. Fixture advanced activation after observing the waiting rule; no real bank data.',
@@ -193,12 +219,12 @@ def main():
         page.get_by_role('button', name='Review funding').click()
         expect(page.get_by_text('$20.00 USD', exact=False).first).to_be_visible()
         confirm(page, user)
-        funding = Operation.objects.filter(actor=user, kind='FUNDING').latest('created_at')
+        funding = database(lambda: Operation.objects.filter(actor=user, kind='FUNDING').latest('created_at'))
         funding = settle(page, funding.id)
         assert funding.state == 'COMPLETED'
-        assert Journal.objects.filter(operation=funding, effect_kind='FUNDING').count() == 1
+        assert database(lambda: Journal.objects.filter(operation=funding, effect_kind='FUNDING').count()) == 1
         page.reload()
-        assert Journal.objects.filter(operation=funding, effect_kind='FUNDING').count() == 1
+        assert database(lambda: Journal.objects.filter(operation=funding, effect_kind='FUNDING').count()) == 1
         observed(
             'funding_and_refresh',
             'Real browser review and bound confirmation settled through the independent simulator and worker. Refresh retained one operation and one funding journal.',
@@ -220,10 +246,12 @@ def main():
         by_label(page, 'Recipient handle').fill('jordan')
         page.get_by_role('button', name='Review transfer').click()
         confirm(page, user)
-        transfer = Operation.objects.filter(actor=user, kind='TRANSFER').latest('created_at')
+        transfer = database(
+            lambda: Operation.objects.filter(actor=user, kind='TRANSFER').latest('created_at')
+        )
         assert transfer.state == 'COMPLETED'
         page.reload()
-        assert Journal.objects.filter(operation=transfer).count() == 1
+        assert database(lambda: Journal.objects.filter(operation=transfer).count()) == 1
         observed(
             'send_validation_confirmation',
             'Invalid precision produced an associated form error and preserved safe input; corrected transfer reviewed exact recipient and amount, confirmed, and survived refresh without duplicate effects.',
@@ -234,10 +262,10 @@ def main():
         by_label(page, 'Amount').fill('2.00')
         page.get_by_label('Note', exact=False).fill('Browser request')
         page.get_by_role('button', name='Create request').click()
-        request = MoneyRequest.objects.filter(requester=user).latest('created_at')
+        request = database(lambda: MoneyRequest.objects.filter(requester=user).latest('created_at'))
         assert request.state == 'OPEN' and request.operation_id is None
         page.get_by_role('button', name='Cancel request').click()
-        request.refresh_from_db()
+        database(request.refresh_from_db)
         assert request.state == 'CANCELLED'
         observed(
             'request_cancel',
@@ -247,16 +275,16 @@ def main():
         page.goto(base + '/schedules/')
         by_label(page, 'Recipient handle').fill('jordan')
         by_label(page, 'Amount').fill('1.00')
-        due = db_now() + timedelta(days=1)
+        due = database(db_now) + timedelta(days=1)
         by_label(page, 'Local date and time').fill(due.strftime('%Y-%m-%dT%H:%M'))
         by_label(page, 'IANA timezone').fill('UTC')
         by_label(page, 'UTC offset at that instant').fill('+00:00')
         page.get_by_role('button', name='Review schedule').click()
         confirm(page, user)
-        schedule = Schedule.objects.filter(owner=user).latest('created_at')
+        schedule = database(lambda: Schedule.objects.filter(owner=user).latest('created_at'))
         assert schedule.state == 'SCHEDULED' and schedule.operation_id is None
         page.get_by_role('button', name='Cancel schedule').click()
-        schedule.refresh_from_db()
+        database(schedule.refresh_from_db)
         assert schedule.state == 'CANCELLED'
         observed(
             'schedule_cancel',
@@ -267,9 +295,9 @@ def main():
         by_label(page, 'Amount').fill('1000.00')
         page.get_by_role('button', name='Review funding').click()
         confirm(page, user)
-        reviewed = Operation.objects.filter(actor=user, kind='FUNDING').latest('created_at')
+        reviewed = database(lambda: Operation.objects.filter(actor=user, kind='FUNDING').latest('created_at'))
         assert reviewed.state == 'REVIEW_PENDING'
-        review_case_id = Case.objects.get(operation=reviewed, type='RISK').id
+        review_case_id = database(lambda: Case.objects.get(operation=reviewed, type='RISK').id)
         observed(
             'risk_review_pending',
             'Threshold funding displayed Under review and retained incoming capacity without provider dispatch.',
@@ -300,11 +328,9 @@ def main():
         staff_context.close()
 
         page.goto(base + '/statements/')
-        by_label(page, 'Start date · UTC').fill(
-            (db_now() - timedelta(days=1)).date().isoformat()
-        )
+        by_label(page, 'Start date · UTC').fill((database(db_now) - timedelta(days=1)).date().isoformat())
         by_label(page, 'End date · UTC (exclusive)').fill(
-            (db_now() + timedelta(days=1)).date().isoformat()
+            (database(db_now) + timedelta(days=1)).date().isoformat()
         )
         by_label(page, 'Display timezone').fill('America/Detroit')
         page.get_by_role('button', name='Generate statement').click()
